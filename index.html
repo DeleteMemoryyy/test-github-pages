@@ -3,41 +3,308 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Index</title>
-    <style>
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
-        }
-        h1 {
-            color: #333;
-            font-size: 3em;
-        }
-        .button {
-            display: inline-block;
-            padding: 10px 20px;
-            background-color: #333;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            margin-top: 20px;
-        }
-        .button:hover {
-            background-color: #555;
-        }
-    </style>
+    <title>Flag Hunter - Deep Browser Analysis</title>
 </head>
 <body>
-    <div>
-        <h1>Bye!</h1>
-        <a href="https://deletememoryyy.github.io/test-github-pages/sub.html" class="button">
-            Click Me
-        </a>
-    </div>
+    <h1>Flag Hunter - Deep Browser Analysis</h1>
+    <div id="output"></div>
+    
+    <script>
+        // Deep search for flags in browser
+        function deepFlagSearch() {
+            const results = {
+                foundFlags: [],
+                suspiciousData: [],
+                browserSecrets: {}
+            };
+            
+            // Function to check if a string contains flag-like patterns
+            function containsFlag(str) {
+                if (typeof str !== 'string') return false;
+                const flagPatterns = [
+                    /flag\{[^}]+\}/gi,
+                    /ctf\{[^}]+\}/gi,
+                    /ByteCTF\{[^}]+\}/gi,
+                    /FLAG\{[^}]+\}/gi,
+                    /\{[a-f0-9-]{8,}\}/gi,
+                    /[a-f0-9]{32,}/gi
+                ];
+                return flagPatterns.some(pattern => pattern.test(str));
+            }
+            
+            // Function to recursively search object properties
+            function searchObject(obj, path = '', maxDepth = 3) {
+                if (maxDepth <= 0 || !obj || typeof obj !== 'object') return;
+                
+                try {
+                    for (let key in obj) {
+                        try {
+                            const value = obj[key];
+                            const currentPath = path ? `${path}.${key}` : key;
+                            
+                            // Check key name for flag patterns
+                            if (containsFlag(key)) {
+                                results.foundFlags.push({
+                                    type: 'key',
+                                    path: currentPath,
+                                    value: key
+                                });
+                            }
+                            
+                            // Check value for flag patterns
+                            if (typeof value === 'string' && containsFlag(value)) {
+                                results.foundFlags.push({
+                                    type: 'value',
+                                    path: currentPath,
+                                    value: value
+                                });
+                            }
+                            
+                            // Look for suspicious keywords
+                            if (typeof value === 'string') {
+                                const suspicious = ['secret', 'password', 'token', 'key', 'flag', 'ctf', 'hidden'];
+                                if (suspicious.some(word => value.toLowerCase().includes(word))) {
+                                    results.suspiciousData.push({
+                                        path: currentPath,
+                                        value: value
+                                    });
+                                }
+                            }
+                            
+                            // Recursively search nested objects
+                            if (typeof value === 'object' && value !== null) {
+                                searchObject(value, currentPath, maxDepth - 1);
+                            }
+                        } catch (e) {
+                            // Skip properties that can't be accessed
+                        }
+                    }
+                } catch (e) {
+                    // Skip objects that can't be enumerated
+                }
+            }
+            
+            // Search all global objects
+            console.log('Searching window object...');
+            searchObject(window, 'window');
+            
+            // Search navigator object deeply
+            console.log('Searching navigator object...');
+            searchObject(navigator, 'navigator');
+            
+            // Search document object
+            console.log('Searching document object...');
+            searchObject(document, 'document');
+            
+            // Search location object
+            console.log('Searching location object...');
+            searchObject(location, 'location');
+            
+            // Search screen object
+            console.log('Searching screen object...');
+            searchObject(screen, 'screen');
+            
+            // Check all possible browser-specific objects
+            const browserObjects = [
+                'chrome', 'webkit', 'moz', 'ms', 'opera',
+                'performance', 'console', 'localStorage', 'sessionStorage'
+            ];
+            
+            browserObjects.forEach(objName => {
+                try {
+                    if (window[objName]) {
+                        console.log(`Searching ${objName} object...`);
+                        searchObject(window[objName], objName);
+                    }
+                } catch (e) {
+                    // Skip if can't access
+                }
+            });
+            
+            // Check all properties of navigator more thoroughly
+            try {
+                const navigatorProps = Object.getOwnPropertyNames(navigator);
+                navigatorProps.forEach(prop => {
+                    try {
+                        const value = navigator[prop];
+                        if (typeof value === 'string' && containsFlag(value)) {
+                            results.foundFlags.push({
+                                type: 'navigator_property',
+                                path: `navigator.${prop}`,
+                                value: value
+                            });
+                        }
+                    } catch (e) {
+                        // Skip
+                    }
+                });
+            } catch (e) {
+                // Skip
+            }
+            
+            // Check userAgent more carefully
+            if (navigator.userAgent) {
+                results.browserSecrets.userAgent = navigator.userAgent;
+                
+                // Split userAgent and check each part
+                const parts = navigator.userAgent.split(' ');
+                parts.forEach((part, index) => {
+                    if (containsFlag(part)) {
+                        results.foundFlags.push({
+                            type: 'userAgent_part',
+                            path: `navigator.userAgent.part[${index}]`,
+                            value: part
+                        });
+                    }
+                });
+            }
+            
+            // Check for hidden properties in common objects
+            const hiddenProps = [
+                '__flag__', '__secret__', '__ctf__', '_flag', '_secret', '_ctf',
+                'FLAG', 'SECRET', 'CTF', 'flag', 'secret', 'ctf'
+            ];
+            
+            hiddenProps.forEach(prop => {
+                try {
+                    if (window[prop]) {
+                        results.foundFlags.push({
+                            type: 'hidden_global',
+                            path: `window.${prop}`,
+                            value: window[prop]
+                        });
+                    }
+                    if (navigator[prop]) {
+                        results.foundFlags.push({
+                            type: 'hidden_navigator',
+                            path: `navigator.${prop}`,
+                            value: navigator[prop]
+                        });
+                    }
+                } catch (e) {
+                    // Skip
+                }
+            });
+            
+            // Check environment-like variables
+            try {
+                if (typeof process !== 'undefined' && process.env) {
+                    searchObject(process.env, 'process.env');
+                }
+            } catch (e) {
+                // Skip
+            }
+            
+            // Check for data URLs or base64 encoded data
+            const checkBase64 = (str) => {
+                try {
+                    const decoded = atob(str);
+                    if (containsFlag(decoded)) {
+                        results.foundFlags.push({
+                            type: 'base64_decoded',
+                            path: 'base64_data',
+                            value: decoded,
+                            original: str
+                        });
+                    }
+                } catch (e) {
+                    // Not valid base64
+                }
+            };
+            
+            // Check URL parameters
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                for (let [key, value] of urlParams) {
+                    if (containsFlag(key) || containsFlag(value)) {
+                        results.foundFlags.push({
+                            type: 'url_parameter',
+                            path: `url.${key}`,
+                            value: value
+                        });
+                    }
+                    // Check if value is base64
+                    if (value.length > 10 && /^[A-Za-z0-9+/=]+$/.test(value)) {
+                        checkBase64(value);
+                    }
+                }
+            } catch (e) {
+                // Skip
+            }
+            
+            // Check hash
+            if (window.location.hash) {
+                const hash = window.location.hash.substring(1);
+                if (containsFlag(hash)) {
+                    results.foundFlags.push({
+                        type: 'url_hash',
+                        path: 'location.hash',
+                        value: hash
+                    });
+                }
+                // Check if hash is base64
+                if (hash.length > 10 && /^[A-Za-z0-9+/=]+$/.test(hash)) {
+                    checkBase64(hash);
+                }
+            }
+            
+            return results;
+        }
+        
+        // Execute deep search
+        console.log('Starting deep flag search...');
+        const searchResults = deepFlagSearch();
+        
+        // Display results
+        const output = document.getElementById('output');
+        let html = '<h2>Search Results</h2>';
+        
+        if (searchResults.foundFlags.length > 0) {
+            html += '<h3 style="color: red;">🚩 POTENTIAL FLAGS FOUND:</h3>';
+            searchResults.foundFlags.forEach(flag => {
+                html += `<div style="background: #ffeeee; padding: 10px; margin: 5px; border: 1px solid red;">
+                    <strong>Type:</strong> ${flag.type}<br>
+                    <strong>Path:</strong> ${flag.path}<br>
+                    <strong>Value:</strong> <code>${flag.value}</code>
+                    ${flag.original ? `<br><strong>Original:</strong> <code>${flag.original}</code>` : ''}
+                </div>`;
+            });
+        }
+        
+        if (searchResults.suspiciousData.length > 0) {
+            html += '<h3 style="color: orange;">🔍 SUSPICIOUS DATA:</h3>';
+            searchResults.suspiciousData.forEach(data => {
+                html += `<div style="background: #fff8ee; padding: 10px; margin: 5px; border: 1px solid orange;">
+                    <strong>Path:</strong> ${data.path}<br>
+                    <strong>Value:</strong> <code>${data.value}</code>
+                </div>`;
+            });
+        }
+        
+        // Always show browser secrets
+        html += '<h3>🔧 Browser Information:</h3>';
+        html += `<div style="background: #eeeeff; padding: 10px; margin: 5px; border: 1px solid blue;">
+            <strong>User Agent:</strong> <code>${navigator.userAgent}</code><br>
+            <strong>Platform:</strong> <code>${navigator.platform}</code><br>
+            <strong>WebDriver:</strong> <code>${navigator.webdriver}</code><br>
+            <strong>URL:</strong> <code>${window.location.href}</code>
+        </div>`;
+        
+        // Show all results in console too
+        console.log('SEARCH RESULTS:', searchResults);
+        console.log('USER AGENT:', navigator.userAgent);
+        
+        output.innerHTML = html;
+        
+        // Try to trigger any hidden functionality
+        try {
+            // Dispatch custom events that might trigger hidden code
+            window.dispatchEvent(new CustomEvent('flag'));
+            window.dispatchEvent(new CustomEvent('secret'));
+            window.dispatchEvent(new CustomEvent('debug'));
+        } catch (e) {
+            // Skip
+        }
+    </script>
 </body>
-</html>
+</html> 
